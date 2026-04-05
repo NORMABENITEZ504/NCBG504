@@ -1,35 +1,33 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+
+# --- CONFIGURACIÓN TEMPORAL (Aquí irán tus códigos reales luego) ---
+CLIENT_ID = 'TU_CLIENT_ID_PROVISIONAL'
+CLIENT_SECRET = 'TU_CLIENT_SECRET_PROVISIONAL'
 
 st.set_page_config(page_title="LISA Discography Tracker", layout="wide")
 
 st.title("🤳 LISA Stats Tracker")
-st.markdown("Monitoreo de streams y popularidad diaria.")
+st.subheader("Monitoreo de la discografía de Lisa")
 
-# Simulación de base de datos (Aquí conectarías el script anterior)
+# Datos de ejemplo para que veas cómo funciona el aumento/disminución
 data = {
     'Canción': ['Rockstar', 'New Woman', 'Moonlit Floor', 'LALISA', 'MONEY'],
     'Streams Diarios': [520000, 410000, 890000, 150000, 280000],
-    'Cambio': [15000, -5000, 45000, 2000, -1000]
+    'Cambio (vs Ayer)': ['▲ 15,000', '▼ 5,000', '▲ 45,000', '▲ 2,000', '▼ 1,000']
 }
 
 df = pd.DataFrame(data)
 
-# Layout de métricas
-col1, col2, col3 = st.columns(3)
+# Mostrar métricas rápidas
+col1, col2 = st.columns(2)
 with col1:
-    st.metric("Top Song", "Moonlit Floor", "+12%")
+    st.metric("Top en Honduras 🇭🇳", "Rockstar", "Puesto #34")
 with col2:
-    st.metric("Total Daily Streams", "2.25M", "▲ 5.2%")
-with col3:
-    st.metric("Honduras Top Chart", "Puesto #34", "▲ 3")
+    st.metric("Más escuchada hoy", "Moonlit Floor", "+12%")
 
-# Gráfica de rendimiento
-st.subheader("Rendimiento por Canción")
-fig = px.bar(df, x='Canción', y='Streams Diarios', color='Cambio', 
-             color_continuous_scale='RdYlGn', title="Flujo de Streams (24h)")
-st.plotly_chart(fig, use_container_width=True)
+st.write("---")
+st.write("### Estado de la discografía")
+st.table(df)
 
-# Tabla interactiva
-st.dataframe(df.style.highlight_max(axis=0, subset=['Streams Diarios']))
+st.info("Nota: Los datos reales se actualizarán cuando conectes tu Client ID de Spotify.")
