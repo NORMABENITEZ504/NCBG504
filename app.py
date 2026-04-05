@@ -80,13 +80,25 @@ for country in countries:
         st.warning(f"⚠️ No se pudo cargar {country}")
         continue
 
-    # detectar columnas
-    cols = {c.lower(): c for c in df.columns}
+    # --- SUSTITUCIÓN SOLICITADA AQUÍ ---
+    def find_column(df, keywords):
+        for col in df.columns:
+            col_lower = col.lower()
+            if any(k in col_lower for k in keywords):
+                return col
+        return None
 
-    artist_col = [c for c in df.columns if "artist" in c.lower()][0]
-    track_col = [c for c in df.columns if "track" in c.lower()][0]
-    streams_col = [c for c in df.columns if "stream" in c.lower()][0]
-    position_col = [c for c in df.columns if "position" in c.lower()][0]
+    artist_col = find_column(df, ["artist"])
+    track_col = find_column(df, ["track", "title", "song"])
+    streams_col = find_column(df, ["stream"])
+    position_col = find_column(df, ["position", "rank"])
+
+    # VALIDACIÓN FUERTE (NO CRASHEA)
+    if not all([artist_col, track_col, streams_col, position_col]):
+        st.warning(f"⚠️ Columnas no detectadas en {country}")
+        st.write("Columnas encontradas:", df.columns)
+        continue
+    # --- FIN DE LA SUSTITUCIÓN ---
 
     # filtrar LISA
     lisa_df = df[df[artist_col].str.contains("LISA", case=False, na=False)]
