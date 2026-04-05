@@ -3,53 +3,49 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import pandas as pd
 
-# 1. Configuración (Debe ser lo primero)
-st.set_page_config(page_title="LISA Real-Time Stats", layout="wide")
+# 1. Configuración de página
+st.set_page_config(page_title="LISA Tracker", layout="wide")
 
-# 2. TUS CLAVES (Pegadas directamente para evitar errores de Secrets)
-CLIENT_ID = 'f693630ca5df44fa8f10bbcd5fbc6830'
-CLIENT_SECRET = '9f90223ed60f46d2b5f39d3a1eb06c2e'
+# 2. Credenciales
+CID = 'f693630ca5df44fa8f10bbcd5fbc6830'
+SEC = '9f90223ed60f46d2b5f39d3a1eb06c2e'
 
-# 3. Función para conectar y traer datos
-def cargar_datos():
-    try:
-        auth_manager = SpotifyClientCredentials(client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
-        sp = spotipy.Spotify(auth_manager=auth_manager)
-        
-        # ID de Lisa
-        LISA_URI = '5L1oOat9Y8mYvRsmVOSI0O'
-        
-        # Pedimos los datos (HN = Honduras)
-        results = sp.artist_top_tracks(LISA_URI, country='HN')
-        tracks = results['tracks']
-        
-        lista_canciones = []
-        for track in tracks:
-            lista_canciones.append({
-                'Canción': track['name'],
-                'Popularidad': track['popularity'],
-                'Álbum': track['album']['name']
-            })
-        return pd.DataFrame(lista_canciones)
-    except Exception as e:
-        st.error(f"Error de conexión con Spotify: {e}")
-        return None
+# 3. Conexión
+auth_manager = SpotifyClientCredentials(client_id=CID, client_secret=SEC)
+sp = spotipy.Spotify(auth_manager=auth_manager)
 
-# 4. Interfaz de la App
 st.title("🤳 LISA Discography Tracker")
-st.write("Monitoreo en tiempo real desde Honduras 🇭🇳")
+st.write("Estadísticas en tiempo real")
 
-df = cargar_datos()
+try:
+    # Buscamos directamente las canciones de Lisa
+    # Usamos country='US' o 'HN', pero 'US' es el más estable para la API
+    results = sp.search(q='artist:LISA', type='track', limit=10)
+    tracks = results['tracks']['items']
+    
+    lista = []
+    for t in tracks:
+        lista.append({
+            'Canción': t['name'],
+            'Popularidad 🔥': t['popularity'],
+            'Álbum': t['album']['name'],
+            'Link': t['external_urls']['spotify']
+        })
+    
+    df = pd.DataFrame(lista)
+    
+    # Ordenar por popularidad
+    df = df.sort_values(by='Popularidad 🔥', ascending=False)
 
-if df is not None:
-    # Métricas
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Más escuchada hoy", df.iloc[0]['Canción'], f"{df.iloc[0]['Popularidad']}/100")
-    with col2:
-        st.metric("País", "Honduras 🇭🇳", "Activo")
+    # Mostrar métricas
+    c1, c2 = st.columns(2)
+    c1.metric("Top Song", df.iloc[0]['Canción'], f"{df.iloc[0]['Popularidad 🔥']}/100")
+    c2.metric("País Actual", "Honduras 🇭🇳", "Spotify API")
 
     st.write("---")
-    st.subheader("🎵 Ranking de Popularidad")
     st.dataframe(df, use_container_width=True)
-    st.success("¡Datos actualizados!")
+    st.success("¡Conexión exitosa!")
+
+except Exception as e:
+    st.error(f"Error técnico: {e}")
+    st.info("Revisa que tus llaves de Spotify no tengan espacios extra.")
