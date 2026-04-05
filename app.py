@@ -1,24 +1,53 @@
 import streamlit as st
 import pandas as pd
+import requests
+from io import StringIO
 import os
 from datetime import datetime
 
-st.set_page_config(page_title="LISA Charts Tracker", layout="wide")
+# --------------------------
+# CONFIG UI (FANBASE STYLE)
+# --------------------------
+st.set_page_config(page_title="LISA Charts PRO", layout="wide")
 
-st.title("🌍 LISA Spotify Charts Tracker")
+st.markdown("""
+<style>
+body {background-color: #0b0b0b; color: white;}
+.stMetric {background-color: #111; padding: 10px; border-radius: 10px;}
+</style>
+""", unsafe_allow_html=True)
 
+st.title("🌍 LISA Spotify Charts Tracker PRO")
+
+# --------------------------
 # CONFIG
+# --------------------------
 artist_name = "LISA"
 countries = ["global", "us", "gb", "kr", "th", "br"]
 
 # --------------------------
-# FUNCIÓN PARA OBTENER CHART
+# GET CHART (FIX REAL)
 # --------------------------
 def get_chart(country):
     url = f"https://spotifycharts.com/regional/{country}/daily/latest/download"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://spotifycharts.com/"
+    }
+
     try:
-        df = pd.read_csv(url)
+        res = requests.get(url, headers=headers)
+
+        if res.status_code != 200:
+            return None
+
+        data = StringIO(res.text)
+        df = pd.read_csv(data)
+
+        df.columns = df.columns.str.strip()
         return df
+
     except:
         return None
 
@@ -32,70 +61,55 @@ if os.path.exists(file):
 else:
     history = pd.DataFrame()
 
-all_results = []
+today = datetime.now().date()
+
+# evitar duplicados del mismo día
+if not history.empty:
+    history["date"] = pd.to_datetime(history["date"]).dt.date
+    history = history[history["date"] != today]
 
 # --------------------------
-# PROCESAR CADA PAÍS
+# EXTRAER DATA
 # --------------------------
+all_results = []
+
 for country in countries:
     df = get_chart(country)
 
     if df is None:
+        st.warning(f"⚠️ No se pudo cargar {country}")
         continue
 
-    # 🔧 LIMPIAR COLUMNAS
-    df.columns = df.columns.str.strip()
+    # detectar columnas
+    cols = {c.lower(): c for c in df.columns}
 
-    # 🔍 DETECTAR COLUMNAS DINÁMICAMENTE
-    artist_col = None
-    track_col = None
-    streams_col = None
-    position_col = None
+    artist_col = [c for c in df.columns if "artist" in c.lower()][0]
+    track_col = [c for c in df.columns if "track" in c.lower()][0]
+    streams_col = [c for c in df.columns if "stream" in c.lower()][0]
+    position_col = [c for c in df.columns if "position" in c.lower()][0]
 
-    for col in df.columns:
-        col_lower = col.lower()
-        if "artist" in col_lower:
-            artist_col = col
-        elif "track" in col_lower:
-            track_col = col
-        elif "stream" in col_lower:
-            streams_col = col
-        elif "position" in col_lower:
-            position_col = col
+    # filtrar LISA
+    lisa_df = df[df[artist_col].str.contains("LISA", case=False, na=False)]
 
-    # ⚠️ VALIDACIÓN
-    if not all([artist_col, track_col, streams_col, position_col]):
-        st.warning(f"⚠️ Columnas no detectadas correctamente en {country}")
-        st.write(df.columns)
-        continue
-
-    # 🎯 FILTRAR LISA
-    lisa_tracks = df[df[artist_col].str.contains("LISA", case=False, na=False)]
-
-    for _, row in lisa_tracks.iterrows():
+    for _, row in lisa_df.iterrows():
         all_results.append({
-            "date": datetime.now(),
+            "date": today,
             "country": country.upper(),
             "track": row[track_col],
             "position": int(row[position_col]),
             "streams": int(row[streams_col])
         })
 
-# --------------------------
-# DATAFRAME NUEVO
-# --------------------------
 new_df = pd.DataFrame(all_results)
 
 if new_df.empty:
-    st.warning("No se encontraron canciones de LISA en los charts hoy.")
+    st.warning("No hay entradas de LISA hoy.")
     st.stop()
 
 # --------------------------
-# COMPARAR CON HISTORIAL
+# COMPARACIÓN
 # --------------------------
 if not history.empty:
-    history["date"] = pd.to_datetime(history["date"], errors="coerce")
-
     merged = pd.merge(
         new_df,
         history,
@@ -104,58 +118,77 @@ if not history.empty:
         suffixes=("", "_old")
     )
 
-    def get_status(row):
+    def status(row):
         if pd.isna(row["position_old"]):
-            return "🆕 New"
+            return "🆕 NEW"
         elif row["position"] < row["position_old"]:
-            return "⬆️ Up"
+            return "⬆️ UP"
         elif row["position"] > row["position_old"]:
-            return "⬇️ Down"
+            return "⬇️ DOWN"
         else:
-            return "➖ Same"
+            return "➖ SAME"
 
-    merged["status"] = merged.apply(get_status, axis=1)
+    merged["status"] = merged.apply(status, axis=1)
 
-    # 🔁 RE-ENTRY
     old_tracks = history["track"].unique()
 
-    merged["re_entry"] = merged.apply(
-        lambda x: "🔁 Re-entry"
-        if (x["track"] in old_tracks and pd.isna(x["position_old"]))
+    merged["reentry"] = merged.apply(
+        lambda x: "🔁 RE-ENTRY"
+        if x["track"] in old_tracks and pd.isna(x["position_old"])
         else "",
         axis=1
     )
 
 else:
     merged = new_df.copy()
-    merged["status"] = "🆕 New"
-    merged["re_entry"] = ""
+    merged["status"] = "🆕 NEW"
+    merged["reentry"] = ""
 
 # --------------------------
 # GUARDAR HISTORIAL
 # --------------------------
-final_history = pd.concat([history, new_df], ignore_index=True)
-final_history.to_csv(file, index=False)
+history = pd.concat([history, new_df], ignore_index=True)
+history.to_csv(file, index=False)
 
 # --------------------------
-# MOSTRAR TABLA
+# ALERTAS FANBASE 🔥
 # --------------------------
-st.subheader("📊 Charts actuales")
+st.subheader("🚨 ALERTAS")
 
-st.dataframe(
-    merged[["country", "track", "position", "streams", "status", "re_entry"]],
-    use_container_width=True
-)
+alerts = []
+
+for _, row in merged.iterrows():
+    if row["status"] == "🆕 NEW":
+        alerts.append(
+            f"🆕 {row['track']} debuta en #{row['position']} en {row['country']} con {row['streams']:,} streams"
+        )
+
+    if row["reentry"] == "🔁 RE-ENTRY":
+        alerts.append(
+            f"🔁 {row['track']} re-ingresa en #{row['position']} en {row['country']} con {row['streams']:,} streams"
+        )
+
+    if row["status"] == "⬆️ UP":
+        alerts.append(
+            f"⬆️ {row['track']} sube a #{row['position']} en {row['country']}"
+        )
+
+# mostrar alertas
+if alerts:
+    for a in alerts[:10]:
+        st.success(a)
+else:
+    st.info("Sin cambios importantes hoy.")
 
 # --------------------------
-# ESTADÍSTICAS
+# MÉTRICAS
 # --------------------------
-st.subheader("🔥 Estadísticas globales")
+st.subheader("📊 RESUMEN GLOBAL")
 
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.metric("Total apariciones", len(merged))
+    st.metric("Entradas", len(merged))
 
 with col2:
     st.metric("Mejor posición", int(merged["position"].min()))
@@ -164,13 +197,23 @@ with col3:
     st.metric("Total streams", f"{merged['streams'].sum():,}")
 
 # --------------------------
-# TOP TRACK
+# RANKING GLOBAL
 # --------------------------
-top_track = merged.loc[merged["streams"].idxmax()]
+st.subheader("🏆 RANKING GLOBAL")
 
-st.info(
-    f"🏆 Top canción: **{top_track['track']}** "
-    f"con {top_track['streams']:,} streams en {top_track['country']}"
+ranking = merged.groupby("track")["streams"].sum().reset_index()
+ranking = ranking.sort_values(by="streams", ascending=False)
+
+st.dataframe(ranking, use_container_width=True)
+
+# --------------------------
+# TABLA COMPLETA
+# --------------------------
+st.subheader("📋 Charts completos")
+
+st.dataframe(
+    merged[["country", "track", "position", "streams", "status", "reentry"]],
+    use_container_width=True
 )
 
 # --------------------------
@@ -178,8 +221,7 @@ st.info(
 # --------------------------
 st.subheader("📈 Streams por canción")
 
-chart_df = merged.groupby("track")["streams"].sum().reset_index()
-st.bar_chart(chart_df.set_index("track"))
+st.bar_chart(ranking.set_index("track"))
 
 # --------------------------
 # GRÁFICAS POR PAÍS
@@ -188,11 +230,8 @@ st.subheader("🌎 Charts por país")
 
 for country in merged["country"].unique():
     st.write(f"### {country}")
+    df_c = merged[merged["country"] == country]
 
-    df_country = merged[merged["country"] == country]
+    st.bar_chart(df_c.set_index("track")["streams"])
 
-    st.bar_chart(
-        df_country.set_index("track")["streams"]
-    )
-
-st.success("🚀 Tracker actualizado correctamente")
+st.success("🔥 Tracker PRO actualizado correctamente")
