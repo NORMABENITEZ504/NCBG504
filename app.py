@@ -18,7 +18,7 @@ st.title("🤳 LISA Global Spotify Tracker")
 
 # 2. Tus Credenciales (Asegúrate de que sean estas exactamente)
 CID = 'f693630ca5df44fa8f10bbcd5fbc6830'
-SEC = '9f90223ed60f46d2b5f39d3a1eb06c2e'
+SEC = '940b0de53c0047d9b7de81546292fc3f'
 
 try:
     # 3. Conexión oficial
