@@ -3,47 +3,55 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import pandas as pd
 
-# 1. Configuracion de pagina
+# 1. Configuracion de la pagina
 st.set_page_config(page_title="LISA Tracker", layout="wide")
 
-# 2. Credenciales reales
+# 2. Tus llaves de Spotify
 CID = 'f693630ca5df44fa8f10bbcd5fbc6830'
 SEC = '9f90223ed60f46d2b5f39d3a1eb06c2e'
 
-# 3. Conexion
+# 3. Conexion segura
 auth_manager = SpotifyClientCredentials(client_id=CID, client_secret=SEC)
 sp = spotipy.Spotify(auth_manager=auth_manager)
 
 st.title("LISA Discography Tracker")
 
 try:
-    # Busqueda simple sin limites ni filtros raros
-    results = sp.search(q='LISA', type='track')
-    tracks = results['tracks']['items']
+    # Buscamos canciones de LISA
+    results = sp.search(q='artist:LISA', type='track')
+    items = results['tracks']['items']
     
-    lista = []
-    for t in tracks:
-        # Filtro de seguridad para asegurar que sea la LISA de BLACKPINK
+    datos_limpios = []
+    
+    for t in items:
+        # Solo si es la LISA que buscamos
         if 'LISA' in t['artists'][0]['name'].upper():
-            lista.append({
-                'Cancion': t['name'],
-                'Popularidad': t['popularity'],
-                'Album': t['album']['name']
+            datos_limpios.append({
+                'Track': t['name'],
+                'Popularity_Score': t['popularity'], # Usamos el nombre que Spotify entiende
+                'Album_Name': t['album']['name']
             })
     
-    df = pd.DataFrame(lista)
+    # Creamos la tabla
+    df = pd.DataFrame(datos_limpios)
     
     if not df.empty:
-        # Ordenar por popularidad
-        df = df.sort_values(by='Popularidad', ascending=False).drop_duplicates(subset=['Cancion'])
+        # Quitamos canciones repetidas y ordenamos
+        df = df.sort_values(by='Popularity_Score', ascending=False).drop_duplicates(subset=['Track'])
         
-        # Mostrar datos
-        st.metric("Cancion mas popular", df.iloc[0]['Cancion'], f"{df.iloc[0]['Popularidad']}/100")
+        # Mostramos la cancion mas top
+        top_name = df.iloc[0]['Track']
+        top_score = df.iloc[0]['Popularity_Score']
+        st.metric("Cancion mas popular", top_name, f"{top_score}/100")
+        
         st.write("---")
+        # Cambiamos los nombres de la tabla para que se vean bonitos en tu web
+        df.columns = ['Cancion', 'Popularidad', 'Album']
         st.dataframe(df, use_container_width=True)
-        st.success("Conexion establecida exitosamente")
+        st.success("¡Conectado exitosamente!")
     else:
-        st.info("No se encontraron resultados para LISA")
+        st.warning("No se encontraron canciones. Reintenta en unos segundos.")
 
 except Exception as e:
-    st.error(f"Error tecnico: {e}")
+    # Este mensaje te dira exactamente que palabra esta fallando si vuelve a ocurrir
+    st.error(f"Error en los datos: {e}")
