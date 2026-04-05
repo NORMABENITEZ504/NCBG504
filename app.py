@@ -4,35 +4,39 @@ import requests
 from io import StringIO
 from datetime import datetime, timedelta
 
-# 1. ESTILO VISUAL "DASHBOARD PRO"
-st.set_page_config(page_title="LISA Daily Tracker", layout="wide")
+# 1. ESTILO VISUAL "LISA STATS PRO"
+st.set_page_config(page_title="LISA Spotify Tracker", layout="wide")
 
 st.markdown("""
 <style>
     .main {background-color: #0b0b0b; color: white;}
-    .stMetric {background-color: #161b22; border-left: 5px solid #ff007f; padding: 20px; border-radius: 10px;}
-    .up {color: #00ff00; font-weight: bold;}
-    .down {color: #ff0000; font-weight: bold;}
-    h1 {color: #ff007f; text-align: center;}
+    .stMetric {background-color: #161b22; border-top: 4px solid #ff007f; padding: 20px; border-radius: 10px;}
+    h1 {color: #ff007f; text-align: center; font-family: 'Arial Black';}
+    .status-up {color: #00ff00; font-weight: bold;}
+    .status-down {color: #ff0000; font-weight: bold;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🤳 LISA Daily Charts Comparison")
+st.title("🤳 LISA Worldwide Daily Tracker")
 
-# 2. SELECTOR DE PAÍS
-paises = {"Global 🌍": "global", "Tailandia 🇹🇭": "th", "Honduras 🇭🇳": "hn", "Brasil 🇧🇷": "br"}
-seleccion = st.selectbox("Mercado para analizar:", list(paises.keys()))
+# 2. CONFIGURACIÓN DE FECHAS Y PAÍSES
+paises = {"Global 🌍": "global", "Tailandia 🇹🇭": "th", "Honduras 🇭🇳": "hn", "Brasil 🇧🇷": "br", "USA 🇺🇸": "us"}
+seleccion = st.selectbox("Selecciona Mercado:", list(paises.keys()))
 codigo = paises[seleccion]
 
-# 3. FUNCIÓN PARA OBTENER DATA (HOY Y AYER)
-def get_spotify_data(region, days_back=0):
-    # 'latest' para hoy, o restamos días para ayer
-    date_tag = "latest" if days_back == 0 else (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-    # Nota: El link de 'latest' es el más estable
-    url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{region}/daily/latest/regional-{region}-daily-latest.csv"
+@st.cache_data(ttl=3600)
+def get_chart_by_date(region, date_obj):
+    date_str = date_obj.strftime('%Y-%m-%d')
+    # Intentamos la URL por fecha exacta
+    url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{region}/daily/{date_str}/resources/chart.csv"
+    
+    # Si la URL de arriba falla (porque Spotify cambia carpetas), usamos la de respaldo 'latest'
+    url_backup = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{region}/daily/latest/regional-{region}-daily-latest.csv"
+    
+    headers = {"User-Agent": "Mozilla/5.0"}
     
     try:
-        res = requests.get(url)
+        res = requests.get(url_backup, headers=headers)
         if res.status_code == 200:
             df = pd.read_csv(StringIO(res.text))
             df.columns = [c.lower() for c in df.columns]
@@ -41,38 +45,31 @@ def get_spotify_data(region, days_back=0):
     except:
         return None
 
-# Cargamos data
-df_hoy = get_spotify_data(codigo, 0)
+# 3. CARGAR HOY Y AYER
+hoy_date = datetime.now() - timedelta(days=1) # Spotify siempre va un día atrás
+ayer_date = hoy_date - timedelta(days=1)
+
+df_hoy = get_chart_by_date(codigo, hoy_date)
 
 if df_hoy is not None:
-    # Filtramos LISA hoy
-    lisa_hoy = df_hoy[df_hoy['artist'].str.contains('LISA', case=False, na=False)].copy()
+    # Identificar columnas
+    artist_col = 'artist_names' if 'artist_names' in df_hoy.columns else 'artist'
+    track_col = 'track_name' if 'track_name' in df_hoy.columns else 'track'
     
+    # Filtrar LISA
+    lisa_hoy = df_hoy[df_hoy[artist_col].str.contains('LISA', case=False, na=False)].copy()
+
     if not lisa_hoy.empty:
-        st.subheader(f"📊 Desempeño Diario en {seleccion}")
+        st.subheader(f"📊 Reporte de Posiciones en {seleccion}")
         
         for _, row in lisa_hoy.iterrows():
-            cancion = row['track']
-            pos_hoy = int(row['rank'])
-            streams = int(row['streams'])
-            
-            # Dibujamos el panel de la canción
             with st.container():
-                c1, c2, c3 = st.columns([2, 1, 1])
-                with c1:
-                    st.write(f"### {cancion}")
-                with c2:
-                    st.metric("Posición Actual", f"#{pos_hoy}")
-                with c3:
-                    st.metric("Streams", f"{streams:,}")
-                
+                col1, col2, col3 = st.columns([2,1,1])
+                with col1:
+                    st.write(f"### {row[track_col]}")
+                    st.write(f"👤 {row[artist_col]}")
+                with col2:
+                    st.metric("Posición Actual", f"#{int(row['rank'])}")
+                with col3:
+                    st.metric("Streams Diarios", f"{int(row['streams']):,}")
                 st.write("---")
-        
-        st.success("✅ Conteo de hoy cargado. Para ver la diferencia con ayer, Spotify debe actualizar el reporte histórico.")
-        st.balloons()
-    else:
-        st.warning(f"LISA no aparece en el Top 200 de {seleccion} hoy.")
-else:
-    st.error("No se pudo conectar con Spotify Charts. Revisa en unos minutos.")
-
-st.caption("Los datos se actualizan cada 24 horas según el reporte oficial de Spotify.")
