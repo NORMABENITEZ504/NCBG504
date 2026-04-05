@@ -1,85 +1,83 @@
 import streamlit as st
 import pandas as pd
 import requests
-import base64
+from io import StringIO
+from datetime import datetime, timedelta
 
 # 1. Configuración de la página
-st.set_page_config(page_title="LISA Worldwide Tracker", layout="wide")
-st.title("🤳 LISA Worldwide Charts Tracker")
+st.set_page_config(page_title="LISA Spotify Top 200 Tracker", layout="wide")
 
-# 2. Tus Llaves (Verificadas)
-CID = 'f693630ca5df44fa8f10bbcd5fbc6830'.strip()
-SEC = '5ebbe4d9a3b94065a9c7f321d471937c'.strip()
+st.title("🏆 LISA Spotify Top 200 Tracker")
+st.write("Datos extraídos directamente del Top 200 Global de Spotify")
 
-def get_token():
+# 🌎 LISTA DE PAÍSES PARA EL TOP 200
+paises = {
+    "Global": "global",
+    "Honduras 🇭🇳": "hn",
+    "Tailandia 🇹🇭": "th",
+    "Brasil 🇧🇷": "br",
+    "Estados Unidos 🇺🇸": "us",
+    "Corea del Sur 🇰🇷": "kr",
+    "México 🇲🇽": "mx",
+    "España 🇪🇸": "es"
+}
+
+seleccion = st.selectbox("Selecciona el país para ver el Top 200:", list(paises.keys()))
+codigo_pais = paises[seleccion]
+
+# 2. FUNCIÓN PARA DESCARGAR EL TOP 200 REAL
+def get_spotify_top_200(country):
+    # Intentamos obtener el de ayer porque el de hoy a veces tarda en subir
+    fecha_ayer = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{country}/daily/latest/regional-{country}-daily-latest.csv"
+    
+    headers = {"User-Agent": "Mozilla/5.0"}
+    
     try:
-        auth_url = "https://accounts.spotify.com/api/token"
-        auth_str = f"{CID}:{SEC}"
-        b64_auth = base64.b64encode(auth_str.encode()).decode()
-        headers = {"Authorization": f"Basic {b64_auth}"}
-        data = {"grant_type": "client_credentials"}
-        res = requests.post(auth_url, headers=headers, data=data)
-        return res.json().get('access_token')
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            # El CSV de Spotify tiene una línea de encabezado extra que hay que saltar
+            csv_data = StringIO(response.text)
+            df = pd.read_csv(csv_data)
+            return df
+        else:
+            return None
     except:
         return None
 
-token = get_token()
+# 3. PROCESAR Y FILTRAR
+df_top = get_spotify_top_200(codigo_pais)
 
-if token:
-    headers = {"Authorization": f"Bearer {token}"}
-    lisa_id = '5L1oOat9Y8mYvRsmVOSI0O'
+if df_top is not None:
+    # Limpiamos nombres de columnas por si acaso
+    df_top.columns = [c.lower().strip() for c in df_top.columns]
     
-    # 🌎 LISTA DE PAÍSES AMPLIADA
-    st.subheader("🌎 Selecciona la Región para ver el Chart")
-    paises = {
-        "Global (Mundo)": "US", 
-        "Tailandia 🇹🇭": "TH", 
-        "Honduras 🇭🇳": "HN", 
-        "Brasil 🇧🇷": "BR", 
-        "Corea del Sur 🇰🇷": "KR",
-        "México 🇲🇽": "MX",
-        "España 🇪🇸": "ES",
-        "Argentina 🇦🇷": "AR",
-        "Francia 🇫🇷": "FR"
-    }
-    seleccion = st.selectbox("Ver ranking de:", list(paises.keys()))
-    codigo_pais = paises[seleccion]
+    # Buscamos a LISA en la columna de artista
+    # (Usamos artist_names o artist según como venga el CSV)
+    col_artista = 'artist_names' if 'artist_names' in df_top.columns else 'artist'
+    col_cancion = 'track_name' if 'track_name' in df_top.columns else 'track'
+    
+    lisa_in_chart = df_top[df_top[col_artista].str.contains("LISA", case=False, na=False)]
 
-    try:
-        # 1. Pedir datos de la artista (con seguro por si falla 'followers')
-        artist_res = requests.get(f"https://api.spotify.com/v1/artists/{lisa_id}", headers=headers).json()
-        
-        # 2. Pedir Top Tracks del país seleccionado
-        tracks_res = requests.get(f"https://api.spotify.com/v1/artists/{lisa_id}/top-tracks?market={codigo_pais}", headers=headers).json()
+    # MÉTRICAS
+    st.write("---")
+    c1, c2 = st.columns(2)
+    c1.metric("Total Canciones en Top 200", len(df_top))
+    c2.metric("Canciones de LISA hoy", len(lisa_in_chart))
 
-        # Mostrar métricas con protección
-        col1, col2 = st.columns(2)
-        f_total = artist_res.get('followers', {}).get('total', 0)
-        pop_total = artist_res.get('popularity', 0)
-        
-        col1.metric("Seguidores Globales", f"{f_total:,}")
-        col2.metric(f"Popularidad en {seleccion}", f"{pop_total}/100")
+    if not lisa_in_chart.empty:
+        st.subheader(f"🔥 LISA en el Top 200 de {seleccion}")
+        # Ajustamos los nombres para que se vean bien
+        display_df = lisa_in_chart.copy()
+        st.table(display_df[[col_cancion, col_artista, 'rank', 'streams']])
+        st.success(f"¡LISA tiene {len(lisa_in_chart)} canciones en el chart de hoy!")
+    else:
+        st.warning(f"LISA no entró hoy en el Top 200 de {seleccion}. ¡A seguir haciendo stream!")
+    
+    # OPCIONAL: Ver el Top 10 general del país
+    with st.expander("Ver el Top 10 General de este país"):
+        st.dataframe(df_top.head(10))
 
-        st.write("---")
-        
-        # Procesar canciones
-        canciones = []
-        for t in tracks_res.get('tracks', []):
-            canciones.append({
-                "Canción": t['name'],
-                "Popularidad Local": t['popularity'],
-                "Álbum": t['album']['name']
-            })
-        
-        if canciones:
-            df = pd.DataFrame(canciones)
-            st.subheader(f"🎵 Top Hits de LISA en {seleccion}")
-            st.table(df)
-            st.bar_chart(df.set_index("Canción")["Popularidad Local"])
-        else:
-            st.warning(f"LISA no aparece en el Top 10 de {seleccion} en este momento.")
-
-    except Exception as e:
-        st.error(f"Hubo un problema al cargar los datos: {e}")
 else:
-    st.error("Error de conexión. Por favor, dale a 'Reboot App' en Streamlit.")
+    st.error("No se pudo conectar con el servidor de Charts de Spotify.")
+    st.info("A veces Spotify tarda en actualizar el archivo. Intenta de nuevo en unos minutos.")
