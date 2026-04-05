@@ -1,97 +1,84 @@
 import streamlit as st
 import pandas as pd
 import requests
-from io import StringIO
-from datetime import datetime
+from bs4 import BeautifulSoup
 
-# 1. ESTILO VISUAL "DARK FANBASE"
-st.set_page_config(page_title="LISA Spotify Dashboard", layout="wide")
+# 1. ESTILO VISUAL PRO
+st.set_page_config(page_title="LISA Charts Center", layout="wide")
 
 st.markdown("""
 <style>
     .main {background-color: #0b0b0b; color: white;}
-    .stMetric {background-color: #161b22; border: 1px solid #ff007f; padding: 20px; border-radius: 15px;}
-    div[data-testid="stExpander"] {background-color: #161b22; border: none;}
-    .css-1offfwp e16nr0p33 {color: #ff007f;}
+    .stMetric {background-color: #161b22; border-left: 5px solid #ff007f; padding: 20px; border-radius: 10px;}
+    .css-12w0qpk {color: #ff007f;}
+    h1 {text-align: center; color: #ff007f; font-family: 'Arial';}
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🤳 LISA Worldwide Charts Dashboard")
-st.write("Seguimiento diario de posiciones en el Top 200")
 
-# 2. SELECTOR DE MERCADO
-col_sel1, col_sel2 = st.columns([2, 1])
-with col_sel1:
-    paises = {
-        "Global 🌍": "global",
-        "Tailandia 🇹🇭": "th",
-        "Honduras 🇭🇳": "hn",
-        "Brasil 🇧🇷": "br",
-        "Estados Unidos 🇺🇸": "us",
-        "Corea del Sur 🇰🇷": "kr",
-        "México 🇲🇽": "mx"
-    }
-    seleccion = st.selectbox("Selecciona el mercado para analizar:", list(paises.keys()))
-    codigo = paises[seleccion]
+# 2. SELECTOR DE PAÍS
+paises = {
+    "Global 🌍": "global",
+    "Tailandia 🇹🇭": "th",
+    "Honduras 🇭🇳": "hn",
+    "Brasil 🇧🇷": "br",
+    "Estados Unidos 🇺🇸": "us",
+    "Corea del Sur 🇰🇷": "kr",
+    "México 🇲🇽": "mx"
+}
+seleccion = st.selectbox("Selecciona mercado para analizar:", list(paises.keys()))
+codigo = paises[seleccion]
 
-# 3. FUNCIÓN PARA CARGAR EL TOP 200 REAL
-@st.cache_data(ttl=3600) # Guarda los datos por 1 hora para que cargue rápido
-def get_top_200(country_code):
-    url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{country_code}/daily/latest/regional-{country_code}-daily-latest.csv"
-    headers = {"User-Agent": "Mozilla/5.0"}
+# 3. FUNCIÓN PARA SCRAPING DE TOP 200 (Más estable que CSV)
+def get_live_charts(country_code):
+    url = f"https://kworb.net/spotify/country/{country_code}_daily.html"
     try:
-        res = requests.get(url, headers=headers)
-        if res.status_code == 200:
-            return pd.read_csv(StringIO(res.text))
-        return None
+        res = requests.get(url)
+        # Kworb es la fuente más estable para trackers de fans
+        tables = pd.read_html(res.text)
+        df = tables[0]
+        return df
     except:
         return None
 
-df = get_top_200(codigo)
+df = get_live_charts(codigo)
 
 if df is not None:
-    # Limpieza de nombres de columnas
-    df.columns = [c.lower().strip() for c in df.columns]
-    artist_col = 'artist_names' if 'artist_names' in df.columns else 'artist'
-    track_col = 'track_name' if 'track_name' in df.columns else 'track'
-    
-    # FILTRAR A LISA
-    lisa_data = df[df[artist_col].str.contains("LISA", case=False, na=False)].copy()
+    # Identificar columnas (Kworb usa nombres distintos)
+    # Buscamos a LISA
+    lisa_mask = df.astype(str).apply(lambda x: x.str.contains('LISA', case=False)).any(axis=1)
+    lisa_data = df[lisa_mask].copy()
 
-    # 4. MÉTRICAS ESTILO "DETAILS"
-    st.write("---")
-    m1, m2, m3 = st.columns(3)
-    
     if not lisa_data.empty:
-        top_pos = int(lisa_data['rank'].min())
-        total_streams = lisa_data['streams'].sum()
+        # Métricas principales
+        m1, m2 = st.columns(2)
         
-        m1.metric("Mejor Posición Hoy", f"#{top_pos}")
-        m2.metric("Total Streams (LISA)", f"{total_streams:,}")
-        m3.metric("Mercado Seleccionado", seleccion)
+        # Intentamos sacar la posición (columna 0 generalmente)
+        pos = lisa_data.iloc[0, 0]
+        streams = lisa_data.iloc[0, 6] if len(lisa_data.columns) > 6 else "N/A"
+        
+        with m1:
+            st.metric("Mejor Posición", f"#{pos}")
+        with m2:
+            st.metric("Streams Diarios (Aprox)", f"{streams}")
 
-        st.write("### 📈 Desempeño de Canciones")
+        st.write("---")
+        st.subheader(f"📊 Desempeño en {seleccion}")
         
-        # TABLA ESTILIZADA
-        # Preparamos los datos para que se vean como en la web que pasaste
-        lisa_data['Puesto'] = lisa_data['rank'].apply(lambda x: f"#{int(x)}")
-        lisa_data['Streams Diarios'] = lisa_data['streams'].apply(lambda x: f"{int(x):,}")
+        # Limpiamos la tabla para que se vea como B-CD
+        # Seleccionamos: Posición, Artista - Canción, Streams
+        # Dependiendo del país, las columnas varían, así que mostramos la fila limpia
+        st.dataframe(lisa_data, use_container_width=True)
         
-        final_table = lisa_data[[track_col, 'Puesto', 'Streams Diarios']]
-        final_table.columns = ['Canción', 'Posición Actual', 'Streams']
-        
-        st.table(final_table)
-        
-        # Gráfica de barras para ver cuál es la que más suena
-        st.bar_chart(lisa_data.set_index(track_col)['streams'])
-        
+        st.success(f"LISA está actualmente en el Top 200 de {seleccion}")
+        st.balloons()
     else:
-        st.warning(f"LISA no se encuentra en el Top 200 de {seleccion} en este momento.")
-        st.info("¡Sigue haciendo stream para que entre en el próximo corte!")
+        st.warning(f"LISA no se encuentra en el Top 200 de {seleccion} hoy.")
+        st.info("Sugerencia: Revisa el chart de Tailandia 🇹🇭 para ver sus mejores números.")
 
 else:
-    st.error("No se pudo obtener la data de Spotify Charts.")
-    st.info("Intenta refrescar la página en unos minutos; a veces los servidores de Amazon S3 se saturan.")
+    st.error("No se pudo conectar con el servidor de Charts.")
+    st.info("Esto pasa cuando Spotify o Kworb están actualizando datos. Intenta en 5 minutos.")
 
-st.write("---")
-st.caption("Actualizado automáticamente con los últimos CSV oficiales de Spotify Charts.")
+st.caption("Los datos se sincronizan con los charts diarios globales.")
