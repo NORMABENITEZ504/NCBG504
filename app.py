@@ -3,53 +3,47 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import pandas as pd
 
-# 1. Configuración de página
+# 1. Configuracion de pagina
 st.set_page_config(page_title="LISA Tracker", layout="wide")
 
-# 2. Credenciales (Tus llaves reales)
+# 2. Credenciales reales
 CID = 'f693630ca5df44fa8f10bbcd5fbc6830'
 SEC = '9f90223ed60f46d2b5f39d3a1eb06c2e'
 
-# 3. Conexión
+# 3. Conexion
 auth_manager = SpotifyClientCredentials(client_id=CID, client_secret=SEC)
 sp = spotipy.Spotify(auth_manager=auth_manager)
 
-st.title("🤳 LISA Discography Tracker")
-st.write("Estadísticas en tiempo real obtenidas de Spotify")
+st.title("LISA Discography Tracker")
 
 try:
-    # Buscamos directamente las canciones de Lisa
-    results = sp.search(q='artist:LISA', type='track', limit=15)
+    # Busqueda simple sin limites ni filtros raros
+    results = sp.search(q='LISA', type='track')
     tracks = results['tracks']['items']
     
     lista = []
     for t in tracks:
-        # Solo agregamos si el artista principal es LISA para evitar confusiones
+        # Filtro de seguridad para asegurar que sea la LISA de BLACKPINK
         if 'LISA' in t['artists'][0]['name'].upper():
             lista.append({
-                'Canción': t['name'],
-                'Popularidad 🔥': t['popularity'], # Aquí estaba el error, ahora está corregido
-                'Álbum': t['album']['name'],
-                'Lanzamiento': t['album']['release_date']
+                'Cancion': t['name'],
+                'Popularidad': t['popularity'],
+                'Album': t['album']['name']
             })
     
     df = pd.DataFrame(lista)
     
-    # Ordenar por las más populares
-    df = df.sort_values(by='Popularidad 🔥', ascending=False).drop_duplicates(subset=['Canción'])
-
-    # Mostrar métricas
     if not df.empty:
-        c1, c2 = st.columns(2)
-        c1.metric("Top Song", df.iloc[0]['Canción'], f"{df.iloc[0]['Popularidad 🔥']}/100")
-        c2.metric("País", "Honduras 🇭🇳", "Spotify API")
-
+        # Ordenar por popularidad
+        df = df.sort_values(by='Popularidad', ascending=False).drop_duplicates(subset=['Cancion'])
+        
+        # Mostrar datos
+        st.metric("Cancion mas popular", df.iloc[0]['Cancion'], f"{df.iloc[0]['Popularidad']}/100")
         st.write("---")
-        st.subheader("🎵 Ranking de Popularidad")
         st.dataframe(df, use_container_width=True)
-        st.success("¡Datos actualizados con éxito!")
+        st.success("Conexion establecida exitosamente")
     else:
-        st.warning("No se encontraron canciones recientes. Intenta refrescar.")
+        st.info("No se encontraron resultados para LISA")
 
 except Exception as e:
-    st.error(f"Error técnico: {e}")
+    st.error(f"Error tecnico: {e}")
