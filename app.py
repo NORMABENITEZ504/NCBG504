@@ -3,74 +3,75 @@ import pandas as pd
 import requests
 import base64
 
-# 1. Configuración Visual
+# 1. Configuración de la página
 st.set_page_config(page_title="LISA Global Tracker", layout="wide")
-st.title("🤳 LISA Global Spotify Tracker")
+st.title("🤳 LISA Worldwide Charts Tracker")
 
-# 2. TUS LLAVES (Limpia cualquier espacio)
+# 2. Tus Llaves
 CID = 'f693630ca5df44fa8f10bbcd5fbc6830'.strip()
 SEC = '5ebbe4d9a3b94065a9c7f321d471937c'.strip()
 
-# 3. CONEXIÓN MANUAL (Directo a Spotify)
-def get_access_token():
+def get_token():
     auth_url = "https://accounts.spotify.com/api/token"
     auth_str = f"{CID}:{SEC}"
     b64_auth = base64.b64encode(auth_str.encode()).decode()
-    
     headers = {"Authorization": f"Basic {b64_auth}"}
     data = {"grant_type": "client_credentials"}
-    
-    response = requests.post(auth_url, headers=headers, data=data)
-    if response.status_code == 200:
-        return response.json()['access_token']
-    return None
+    res = requests.post(auth_url, headers=headers, data=data)
+    return res.json().get('access_token') if res.status_code == 200 else None
 
-token = get_access_token()
+token = get_token()
 
 if token:
     headers = {"Authorization": f"Bearer {token}"}
-    lisa_id = '5L1oOat9Y8mYvRsmVOSI0O' # ID oficial de LISA
+    lisa_id = '5L1oOat9Y8mYvRsmVOSI0O'
     
+    # Selector de Países
+    st.subheader("🌎 Selecciona la Región")
+    paises = {
+        "Global": "US", 
+        "Tailandia 🇹🇭": "TH", 
+        "Honduras 🇭🇳": "HN", 
+        "Brasil 🇧🇷": "BR", 
+        "Corea del Sur 🇰🇷": "KR",
+        "México 🇲🇽": "MX"
+    }
+    seleccion = st.selectbox("Ver ranking de:", list(paises.keys()))
+    codigo_pais = paises[seleccion]
+
     try:
-        # Petición oficial de Artista
-        artist_url = f"https://api.spotify.com/v1/artists/{lisa_id}"
-        artist_res = requests.get(artist_url, headers=headers)
-        artist_data = artist_res.json()
+        # 1. Datos Generales (Seguidores)
+        artist_data = requests.get(f"https://api.spotify.com/v1/artists/{lisa_id}", headers=headers).json()
         
-        # Petición oficial de Canciones
-        tracks_url = f"https://api.spotify.com/v1/artists/{lisa_id}/top-tracks?market=US"
-        tracks_res = requests.get(tracks_url, headers=headers)
-        tracks_data = tracks_res.json()
+        # 2. Datos por País Seleccionado
+        tracks_res = requests.get(f"https://api.spotify.com/v1/artists/{lisa_id}/top-tracks?market={codigo_pais}", headers=headers).json()
 
-        # Mostrar Métricas
         col1, col2 = st.columns(2)
-        
-        # Usamos .get() para que si no hay datos, no crashee
-        f_count = artist_data.get('followers', {}).get('total', 0)
-        pop_score = artist_data.get('popularity', 0)
-
-        col1.metric("Seguidores Globales", f"{f_count:,}")
-        col2.metric("Popularidad Global", f"{pop_score}/100")
+        col1.metric("Seguidores Totales", f"{artist_data['followers']['total']:,}")
+        col2.metric("Popularidad Global", f"{artist_data['popularity']}/100")
 
         st.write("---")
-        st.subheader("🎵 Canciones Top de LISA")
+        st.subheader(f"🎵 Top Canciones en {seleccion}")
         
         canciones = []
-        for t in tracks_data.get('tracks', []):
+        for t in tracks_res.get('tracks', []):
             canciones.append({
                 "Canción": t['name'],
-                "Popularidad": t['popularity'],
-                "Álbum": t['album']['name']
+                "Popularidad Local": t['popularity'],
+                "Álbum": t['album']['name'],
+                "Preview": t['preview_url'] # Link para escuchar un pedacito
             })
         
         if canciones:
-            st.table(pd.DataFrame(canciones))
-            st.success("✅ ¡CONECTADO EXITOSAMENTE!")
-            st.balloons()
+            df = pd.DataFrame(canciones)
+            st.table(df[['Canción', 'Popularidad Local', 'Álbum']])
+            
+            # Gráfica de éxito local
+            st.bar_chart(df.set_index("Canción")["Popularidad Local"])
         else:
-            st.warning("No se encontraron canciones en este momento.")
+            st.warning(f"LISA no tiene canciones en el Top 10 de {seleccion} hoy.")
 
     except Exception as e:
-        st.error(f"Hubo un detalle al procesar los datos: {e}")
+        st.error(f"Error: {e}")
 else:
-    st.error("⚠️ Error de Token. Verifica tus llaves en el Dashboard de Spotify.")
+    st.error("Error de conexión. Revisa tus llaves.")
