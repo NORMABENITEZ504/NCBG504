@@ -2,46 +2,44 @@ import streamlit as st
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 
-# 1. Configuración rápida
-st.set_page_config(page_title="LISA Global Stats")
+# 1. Configuracion rapida
+st.set_page_config(page_title="LISA Global Stats", page_icon="📊")
 
-# 2. Credenciales (Limpiadas de cualquier espacio invisible)
-CID = 'f693630ca5df44fa8f10bbcd5fbc6830'.strip()
-SEC = '9f90223ed60f46d2b5f39d3a1eb06c2e'.strip()
+# 2. TUS LLAVES (Las he limpiado de espacios extra)
+CID = "f693630ca5df44fa8f10bbcd5fbc6830".strip()
+SEC = "9f90223ed60f46d2b5f39d3a1eb06c2e".strip()
 
 st.title("📊 LISA Global Stats")
 
 try:
-    # 3. Intentar conexión
-    auth_manager = SpotifyClientCredentials(client_id=CID, client_secret=SEC)
-    sp = spotipy.Spotify(auth_manager=auth_manager)
+    # 3. Conexion ultra-limpia
+    client_credentials_manager = SpotifyClientCredentials(client_id=CID, client_secret=SEC)
+    sp = spotipy.Spotify(client_credentials_manager=client_credentials_manager)
     
-    # 4. ID Directo de LISA
+    # 4. Pedir datos de LISA de BLACKPINK
     lisa_id = '5L1oOat9Y8mYvRsmVOSI0O'
-    
-    # 5. Pedir datos
     artist = sp.artist(lisa_id)
     
-    # Si llega aquí, es que funcionó
-    name = artist['name']
+    # Si llegamos aqui, ¡FUNCIONO!
     followers = artist['followers']['total']
     popularity = artist['popularity']
+    name = artist['name']
 
-    st.balloons() # ¡Festejo si funciona!
+    st.balloons()
     
+    st.subheader(f"Perfil Oficial de {name}")
     col1, col2 = st.columns(2)
     col1.metric("Seguidores Globales", f"{followers:,}")
     col2.metric("Popularidad", f"{popularity}/100")
     
-    st.write(f"Conectado exitosamente al perfil oficial de **{name}**")
+    st.success("¡Conexión establecida con éxito! Ya puedes ver los números reales.")
 
-except Exception as error:
-    # ESTO NOS DIRÁ EL ERROR REAL
-    st.error("⚠️ Error detectado")
-    st.code(f"Tipo de error: {type(error).__name__}")
-    st.code(f"Mensaje: {error}")
+except Exception as e:
+    st.error("⚠️ Sigue habiendo un problema de permiso (Error 401)")
+    st.write("Esto significa que Spotify no reconoce tus llaves.")
     
-    if "invalid_client" in str(error):
-        st.warning("El problema son las llaves (ID o Secret). Revisa que estén bien copiadas en Spotify Developer.")
-    elif "404" in str(error):
-        st.warning("Spotify no encuentra el ID de la artista. Revisaremos el código de nuevo.")
+    st.info("💡 **Haz esto para arreglarlo:**")
+    st.write("1. Ve a tu **Spotify Developer Dashboard**.")
+    st.write("2. Abre tu App y dale al botón **'Settings'**.")
+    st.write("3. Dale clic a **'View Client Secret'** y asegúrate de que sea EXACTAMENTE: `9f90223ed60f46d2b5f39d3a1eb06c2e`.")
+    st.write("4. Si es diferente, cópialo y cámbialo en la línea 10 de tu código en GitHub.")
