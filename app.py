@@ -1,21 +1,23 @@
 import streamlit as st
 import pandas as pd
-from spotifycharts import SpotifyCharts
+import requests
+from io import StringIO
 
-# 1. ESTILO VISUAL "B-CD STYLE"
-st.set_page_config(page_title="LISA Charts Center", layout="wide")
+# 1. ESTILO VISUAL "B-CD STYLE" (Fondo oscuro y rosa)
+st.set_page_config(page_title="LISA Worldwide Charts", layout="wide")
 
 st.markdown("""
 <style>
     .main {background-color: #0b0b0b; color: white;}
     .stMetric {background-color: #161b22; border-left: 5px solid #ff007f; padding: 20px; border-radius: 10px;}
-    h1 {text-align: center; color: #ff007f; font-family: 'Arial';}
+    h1 {text-align: center; color: #ff007f; font-weight: bold;}
+    .stSelectbox label {color: #ff007f !important;}
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🤳 LISA Worldwide Charts Dashboard")
 
-# 2. CONFIGURACIÓN DE MERCADOS
+# 2. SELECTOR DE MERCADO
 paises = {
     "Global 🌍": "global",
     "Tailandia 🇹🇭": "th",
@@ -25,45 +27,54 @@ paises = {
     "Corea del Sur 🇰🇷": "kr",
     "México 🇲🇽": "mx"
 }
-seleccion = st.selectbox("Selecciona mercado para analizar el Top 200:", list(paises.keys()))
+seleccion = st.selectbox("Selecciona un país para ver el Top 200:", list(paises.keys()))
 codigo = paises[seleccion]
 
-# 3. OBTENER EL TOP 200 REAL
-try:
-    api = SpotifyCharts()
-    # Traemos el chart diario más reciente
-    df = api.get_chart(region=codigo, freq='daily', chart='top200')
+# 3. OBTENER EL TOP 200 REAL (CSV OFICIAL)
+def get_data(region):
+    # Usamos el enlace directo al CSV diario de Spotify
+    url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{region}/daily/latest/regional-{region}-daily-latest.csv"
+    try:
+        res = requests.get(url)
+        if res.status_code == 200:
+            return pd.read_csv(StringIO(res.text))
+        return None
+    except:
+        return None
+
+df = get_data(codigo)
+
+if df is not None:
+    # Ajustamos columnas según el país
+    df.columns = [c.lower() for c in df.columns]
+    artist_col = 'artist_names' if 'artist_names' in df.columns else 'artist'
+    track_col = 'track_name' if 'track_name' in df.columns else 'track'
     
-    if df is not None and not df.empty:
-        # Filtramos a LISA (buscamos en la columna de artistas)
-        lisa_tracks = df[df['artist'].str.contains('LISA', case=False, na=False)].copy()
+    # BUSCAMOS A LISA
+    lisa_hits = df[df[artist_col].str.contains('LISA', case=False, na=False)].copy()
 
-        if not lisa_tracks.empty:
-            # MÉTRICAS PRO
-            m1, m2, m3 = st.columns(3)
-            with m1:
-                st.metric("Mejor Posición", f"#{int(lisa_tracks['rank'].min())}")
-            with m2:
-                st.metric("Total Streams", f"{int(lisa_tracks['streams'].sum()):,}")
-            with m3:
-                st.metric("Canciones en Chart", len(lisa_tracks))
+    if not lisa_hits.empty:
+        # MÉTRICAS ESTILO B-CD
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.metric("Mejor Posición", f"#{int(lisa_hits['rank'].min())}")
+        with m2:
+            st.metric("Total Streams", f"{int(lisa_hits['streams'].sum()):,}")
+        with m3:
+            st.metric("Canciones en Chart", len(lisa_hits))
 
-            st.write("---")
-            st.subheader(f"📊 Desempeño detallado en {seleccion}")
-            
-            # Formateamos la tabla para que se vea limpia
-            lisa_tracks = lisa_tracks[['rank', 'track', 'artist', 'streams']]
-            lisa_tracks.columns = ['Puesto', 'Canción', 'Artista', 'Streams']
-            
-            st.table(lisa_tracks)
-            st.balloons()
-        else:
-            st.warning(f"LISA no entró en el Top 200 de {seleccion} hoy.")
-            st.info("¡Sigue haciendo stream para que aparezca mañana!")
-            
+        st.write("---")
+        st.subheader(f"📊 Desempeño en {seleccion}")
+        
+        # TABLA LIMPIA
+        tabla_final = lisa_hits[['rank', track_col, 'streams']]
+        tabla_final.columns = ['Puesto', 'Canción', 'Streams Diarios']
+        st.table(tabla_final)
+        
+        st.balloons()
     else:
-        st.error("Spotify no ha publicado los datos de hoy todavía.")
+        st.warning(f"LISA no está en el Top 200 de {seleccion} hoy.")
+else:
+    st.error("Spotify aún no ha actualizado los datos de hoy. Intenta en un momento.")
 
-except Exception as e:
-    st.error("Error de conexión con los servidores oficiales.")
-    st.info("Intenta darle a 'Manage app' -> 'Reboot' en Streamlit para limpiar la conexión.")
+st.caption("Datos sincronizados con los reportes diarios de Spotify Charts.")
