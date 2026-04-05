@@ -2,74 +2,85 @@ import streamlit as st
 import pandas as pd
 import requests
 from io import StringIO
-from datetime import datetime, timedelta
 
-# 1. ESTILO VISUAL "LISA STATS PRO"
-st.set_page_config(page_title="LISA Spotify Tracker", layout="wide")
+# 1. ESTILO "FANBASE PRO"
+st.set_page_config(page_title="LISA Worldwide Stats", layout="wide")
 
 st.markdown("""
 <style>
     .main {background-color: #0b0b0b; color: white;}
-    .stMetric {background-color: #161b22; border-top: 4px solid #ff007f; padding: 20px; border-radius: 10px;}
+    .stMetric {background-color: #161b22; border-left: 5px solid #ff007f; padding: 20px; border-radius: 10px;}
     h1 {color: #ff007f; text-align: center; font-family: 'Arial Black';}
-    .status-up {color: #00ff00; font-weight: bold;}
-    .status-down {color: #ff0000; font-weight: bold;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🤳 LISA Worldwide Daily Tracker")
+st.title("🤳 LISA Worldwide Charts Tracker")
 
-# 2. CONFIGURACIÓN DE FECHAS Y PAÍSES
-paises = {"Global 🌍": "global", "Tailandia 🇹🇭": "th", "Honduras 🇭🇳": "hn", "Brasil 🇧🇷": "br", "USA 🇺🇸": "us"}
-seleccion = st.selectbox("Selecciona Mercado:", list(paises.keys()))
+# 2. SELECTOR DE PAÍS
+paises = {
+    "Global 🌍": "global",
+    "Tailandia 🇹🇭": "th",
+    "Honduras 🇭🇳": "hn",
+    "Brasil 🇧🇷": "br",
+    "Estados Unidos 🇺🇸": "us"
+}
+seleccion = st.selectbox("Mercado para analizar:", list(paises.keys()))
 codigo = paises[seleccion]
 
-@st.cache_data(ttl=3600)
-def get_chart_by_date(region, date_obj):
-    date_str = date_obj.strftime('%Y-%m-%d')
-    # Intentamos la URL por fecha exacta
-    url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{region}/daily/{date_str}/resources/chart.csv"
+# 3. FUNCIÓN DE DESCARGA CON SEGURIDAD
+def get_data(region):
+    # Intentamos la URL más estable de Spotify Charts
+    url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{region}/daily/latest/regional-{region}-daily-latest.csv"
     
-    # Si la URL de arriba falla (porque Spotify cambia carpetas), usamos la de respaldo 'latest'
-    url_backup = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{region}/daily/latest/regional-{region}-daily-latest.csv"
-    
-    headers = {"User-Agent": "Mozilla/5.0"}
+    # Engañamos al servidor para que piense que somos un navegador normal
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
     
     try:
-        res = requests.get(url_backup, headers=headers)
-        if res.status_code == 200:
-            df = pd.read_csv(StringIO(res.text))
-            df.columns = [c.lower() for c in df.columns]
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            # Saltamos la primera línea si Spotify mete un encabezado extra
+            raw_text = response.text
+            if "Pitched" in raw_text or "Spotify" in raw_text[:50]:
+                df = pd.read_csv(StringIO(raw_text), skiprows=1)
+            else:
+                df = pd.read_csv(StringIO(raw_text))
+            
+            df.columns = [c.lower().strip() for c in df.columns]
             return df
         return None
     except:
         return None
 
-# 3. CARGAR HOY Y AYER
-hoy_date = datetime.now() - timedelta(days=1) # Spotify siempre va un día atrás
-ayer_date = hoy_date - timedelta(days=1)
+df = get_data(codigo)
 
-df_hoy = get_chart_by_date(codigo, hoy_date)
-
-if df_hoy is not None:
-    # Identificar columnas
-    artist_col = 'artist_names' if 'artist_names' in df_hoy.columns else 'artist'
-    track_col = 'track_name' if 'track_name' in df_hoy.columns else 'track'
+if df is not None:
+    # Identificamos las columnas de Artista y Streams
+    artist_col = 'artist_names' if 'artist_names' in df.columns else 'artist'
+    track_col = 'track_name' if 'track_name' in df.columns else 'track'
+    stream_col = 'streams' # Esta es la que te faltaba
     
-    # Filtrar LISA
-    lisa_hoy = df_hoy[df_hoy[artist_col].str.contains('LISA', case=False, na=False)].copy()
+    # Filtramos a LISA
+    lisa_hoy = df[df[artist_col].str.contains('LISA', case=False, na=False)].copy()
 
     if not lisa_hoy.empty:
-        st.subheader(f"📊 Reporte de Posiciones en {seleccion}")
+        st.subheader(f"📊 Top 200 de {seleccion}")
         
         for _, row in lisa_hoy.iterrows():
             with st.container():
-                col1, col2, col3 = st.columns([2,1,1])
-                with col1:
+                c1, c2, c3 = st.columns([2,1,1])
+                with c1:
                     st.write(f"### {row[track_col]}")
                     st.write(f"👤 {row[artist_col]}")
-                with col2:
+                with c2:
                     st.metric("Posición Actual", f"#{int(row['rank'])}")
-                with col3:
-                    st.metric("Streams Diarios", f"{int(row['streams']):,}")
+                with c3:
+                    # AQUÍ APARECERÁN TUS STREAMS
+                    try:
+                        st.metric("Streams Diarios", f"{int(row[stream_col]):,}")
+                    except:
+                        st.metric("Streams Diarios", "Cargando...")
                 st.write("---")
+        
+        st.success
