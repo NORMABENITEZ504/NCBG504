@@ -1,68 +1,66 @@
 import streamlit as st
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
 import pandas as pd
+import requests
+import base64
 
-# 1. Estilo Visual
+# 1. Configuración Visual
 st.set_page_config(page_title="LISA Global Tracker", layout="wide")
-
-st.markdown("""
-<style>
-    .main {background-color: #0b0b0b;}
-    .stMetric {background-color: #111; border: 1px solid #ff007f; padding: 15px; border-radius: 10px;}
-    h1 {color: #ff007f; text-align: center;}
-</style>
-""", unsafe_allow_html=True)
-
 st.title("🤳 LISA Global Spotify Tracker")
 
-# 2. TUS LLAVES (Verificadas)
-CID = 'f693630ca5df44fa8f10bbcd5fbc6830'
-SEC = '5ebbe4d9a3b94065a9c7f321d471937c'
+# 2. TUS LLAVES (Limpia cualquier espacio)
+CID = 'f693630ca5df44fa8f10bbcd5fbc6830'.strip()
+SEC = '5ebbe4d9a3b94065a9c7f321d471937c'.strip()
 
-try:
-    # 3. CONEXIÓN DIRECTA
-    # Forzamos a que use la dirección oficial de Spotify para evitar el error 404
-    auth_manager = SpotifyClientCredentials(
-        client_id=CID.strip(), 
-        client_secret=SEC.strip()
-    )
-    sp = spotipy.Spotify(auth_manager=auth_manager)
+# 3. CONEXIÓN MANUAL (Sin librerías que fallen)
+def get_access_token():
+    auth_str = f"{CID}:{SEC}"
+    b64_auth = base64.b64encode(auth_str.encode()).decode()
+    
+    headers = {"Authorization": f"Basic {b64_auth}"}
+    data = {"grant_type": "client_credentials"}
+    
+    # USAMOS LA URL OFICIAL DIRECTA
+    response = requests.post("https://accounts.spotify.com/api/token", headers=headers, data=data)
+    if response.status_code == 200:
+        return response.json()['access_token']
+    return None
 
-    # El ID único de LISA (sacado directamente de su perfil oficial)
+token = get_access_token()
+
+if token:
+    headers = {"Authorization": f"Bearer {token}"}
     lisa_id = '5L1oOat9Y8mYvRsmVOSI0O'
     
-    # 4. PEDIR DATOS AL SERVIDOR OFICIAL
-    artist = sp.artist(lisa_id)
-    
-    # MOSTRAR NÚMEROS GLOBALES
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Seguidores Totales", f"{artist['followers']['total']:,}")
-    with col2:
-        st.metric("Popularidad Mundial", f"{artist['popularity']}/100")
+    try:
+        # Petición oficial de Artista
+        artist_url = f"https://api.spotify.com/v1/artists/{lisa_id}"
+        artist_data = requests.get(artist_url, headers=headers).json()
+        
+        # Petición oficial de Canciones
+        tracks_url = f"https://api.spotify.com/v1/artists/{lisa_id}/top-tracks?market=US"
+        tracks_data = requests.get(tracks_url, headers=headers).json()
 
-    st.write("---")
-    st.subheader("🎵 Top Canciones más populares (Global)")
+        # Mostrar Métricas
+        col1, col2 = st.columns(2)
+        col1.metric("Seguidores Globales", f"{artist_data['followers']['total']:,}")
+        col2.metric("Popularidad", f"{artist_data['popularity']}/100")
 
-    # 5. TOP TRACKS
-    top_tracks = sp.artist_top_tracks(lisa_id, country='US')
-    
-    lista = []
-    for t in top_tracks['tracks']:
-        lista.append({
-            "Canción": t['name'],
-            "Popularidad": t['popularity'],
-            "Álbum": t['album']['name']
-        })
-    
-    df = pd.DataFrame(lista)
-    st.table(df)
-    
-    st.success("✅ ¡CONEXIÓN EXITOSA! Datos de LISA cargados.")
-    st.balloons()
+        st.write("---")
+        st.subheader("🎵 Canciones Top")
+        
+        canciones = []
+        for t in tracks_data['tracks']:
+            canciones.append({
+                "Canción": t['name'],
+                "Popularidad": t['popularity'],
+                "Álbum": t['album']['name']
+            })
+        
+        st.table(pd.DataFrame(canciones))
+        st.success("✅ ¡CONECTADO EXITOSAMENTE!")
+        st.balloons()
 
-except Exception as e:
-    st.error("⚠️ Error de conexión con el servidor.")
-    st.write("Spotify rechazó la solicitud. Intenta darle a 'Reboot App' en Streamlit.")
-    st.info(f"Nota técnica: {e}")
+    except Exception as e:
+        st.error(f"Error al leer datos: {e}")
+else:
+    st.error("⚠️ Error de Token. Verifica que el Secret sea el nuevo en Spotify Dashboard.")
