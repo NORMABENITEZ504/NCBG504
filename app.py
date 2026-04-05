@@ -2,82 +2,96 @@ import streamlit as st
 import pandas as pd
 import requests
 from io import StringIO
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# 1. Configuración de la página
-st.set_page_config(page_title="LISA Spotify Top 200 Tracker", layout="wide")
+# 1. ESTILO VISUAL "DARK FANBASE"
+st.set_page_config(page_title="LISA Spotify Dashboard", layout="wide")
 
-st.title("🏆 LISA Spotify Top 200 Tracker")
-st.write("Datos extraídos directamente del Top 200 Global de Spotify")
+st.markdown("""
+<style>
+    .main {background-color: #0b0b0b; color: white;}
+    .stMetric {background-color: #161b22; border: 1px solid #ff007f; padding: 20px; border-radius: 15px;}
+    div[data-testid="stExpander"] {background-color: #161b22; border: none;}
+    .css-1offfwp e16nr0p33 {color: #ff007f;}
+</style>
+""", unsafe_allow_html=True)
 
-# 🌎 LISTA DE PAÍSES PARA EL TOP 200
-paises = {
-    "Global": "global",
-    "Honduras 🇭🇳": "hn",
-    "Tailandia 🇹🇭": "th",
-    "Brasil 🇧🇷": "br",
-    "Estados Unidos 🇺🇸": "us",
-    "Corea del Sur 🇰🇷": "kr",
-    "México 🇲🇽": "mx",
-    "España 🇪🇸": "es"
-}
+st.title("🤳 LISA Worldwide Charts Dashboard")
+st.write("Seguimiento diario de posiciones en el Top 200")
 
-seleccion = st.selectbox("Selecciona el país para ver el Top 200:", list(paises.keys()))
-codigo_pais = paises[seleccion]
+# 2. SELECTOR DE MERCADO
+col_sel1, col_sel2 = st.columns([2, 1])
+with col_sel1:
+    paises = {
+        "Global 🌍": "global",
+        "Tailandia 🇹🇭": "th",
+        "Honduras 🇭🇳": "hn",
+        "Brasil 🇧🇷": "br",
+        "Estados Unidos 🇺🇸": "us",
+        "Corea del Sur 🇰🇷": "kr",
+        "México 🇲🇽": "mx"
+    }
+    seleccion = st.selectbox("Selecciona el mercado para analizar:", list(paises.keys()))
+    codigo = paises[seleccion]
 
-# 2. FUNCIÓN PARA DESCARGAR EL TOP 200 REAL
-def get_spotify_top_200(country):
-    # Intentamos obtener el de ayer porque el de hoy a veces tarda en subir
-    fecha_ayer = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{country}/daily/latest/regional-{country}-daily-latest.csv"
-    
+# 3. FUNCIÓN PARA CARGAR EL TOP 200 REAL
+@st.cache_data(ttl=3600) # Guarda los datos por 1 hora para que cargue rápido
+def get_top_200(country_code):
+    url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{country_code}/daily/latest/regional-{country_code}-daily-latest.csv"
     headers = {"User-Agent": "Mozilla/5.0"}
-    
     try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            # El CSV de Spotify tiene una línea de encabezado extra que hay que saltar
-            csv_data = StringIO(response.text)
-            df = pd.read_csv(csv_data)
-            return df
-        else:
-            return None
+        res = requests.get(url, headers=headers)
+        if res.status_code == 200:
+            return pd.read_csv(StringIO(res.text))
+        return None
     except:
         return None
 
-# 3. PROCESAR Y FILTRAR
-df_top = get_spotify_top_200(codigo_pais)
+df = get_top_200(codigo)
 
-if df_top is not None:
-    # Limpiamos nombres de columnas por si acaso
-    df_top.columns = [c.lower().strip() for c in df_top.columns]
+if df is not None:
+    # Limpieza de nombres de columnas
+    df.columns = [c.lower().strip() for c in df.columns]
+    artist_col = 'artist_names' if 'artist_names' in df.columns else 'artist'
+    track_col = 'track_name' if 'track_name' in df.columns else 'track'
     
-    # Buscamos a LISA en la columna de artista
-    # (Usamos artist_names o artist según como venga el CSV)
-    col_artista = 'artist_names' if 'artist_names' in df_top.columns else 'artist'
-    col_cancion = 'track_name' if 'track_name' in df_top.columns else 'track'
-    
-    lisa_in_chart = df_top[df_top[col_artista].str.contains("LISA", case=False, na=False)]
+    # FILTRAR A LISA
+    lisa_data = df[df[artist_col].str.contains("LISA", case=False, na=False)].copy()
 
-    # MÉTRICAS
+    # 4. MÉTRICAS ESTILO "DETAILS"
     st.write("---")
-    c1, c2 = st.columns(2)
-    c1.metric("Total Canciones en Top 200", len(df_top))
-    c2.metric("Canciones de LISA hoy", len(lisa_in_chart))
-
-    if not lisa_in_chart.empty:
-        st.subheader(f"🔥 LISA en el Top 200 de {seleccion}")
-        # Ajustamos los nombres para que se vean bien
-        display_df = lisa_in_chart.copy()
-        st.table(display_df[[col_cancion, col_artista, 'rank', 'streams']])
-        st.success(f"¡LISA tiene {len(lisa_in_chart)} canciones en el chart de hoy!")
-    else:
-        st.warning(f"LISA no entró hoy en el Top 200 de {seleccion}. ¡A seguir haciendo stream!")
+    m1, m2, m3 = st.columns(3)
     
-    # OPCIONAL: Ver el Top 10 general del país
-    with st.expander("Ver el Top 10 General de este país"):
-        st.dataframe(df_top.head(10))
+    if not lisa_data.empty:
+        top_pos = int(lisa_data['rank'].min())
+        total_streams = lisa_data['streams'].sum()
+        
+        m1.metric("Mejor Posición Hoy", f"#{top_pos}")
+        m2.metric("Total Streams (LISA)", f"{total_streams:,}")
+        m3.metric("Mercado Seleccionado", seleccion)
+
+        st.write("### 📈 Desempeño de Canciones")
+        
+        # TABLA ESTILIZADA
+        # Preparamos los datos para que se vean como en la web que pasaste
+        lisa_data['Puesto'] = lisa_data['rank'].apply(lambda x: f"#{int(x)}")
+        lisa_data['Streams Diarios'] = lisa_data['streams'].apply(lambda x: f"{int(x):,}")
+        
+        final_table = lisa_data[[track_col, 'Puesto', 'Streams Diarios']]
+        final_table.columns = ['Canción', 'Posición Actual', 'Streams']
+        
+        st.table(final_table)
+        
+        # Gráfica de barras para ver cuál es la que más suena
+        st.bar_chart(lisa_data.set_index(track_col)['streams'])
+        
+    else:
+        st.warning(f"LISA no se encuentra en el Top 200 de {seleccion} en este momento.")
+        st.info("¡Sigue haciendo stream para que entre en el próximo corte!")
 
 else:
-    st.error("No se pudo conectar con el servidor de Charts de Spotify.")
-    st.info("A veces Spotify tarda en actualizar el archivo. Intenta de nuevo en unos minutos.")
+    st.error("No se pudo obtener la data de Spotify Charts.")
+    st.info("Intenta refrescar la página en unos minutos; a veces los servidores de Amazon S3 se saturan.")
+
+st.write("---")
+st.caption("Actualizado automáticamente con los últimos CSV oficiales de Spotify Charts.")
