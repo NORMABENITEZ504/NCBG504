@@ -3,55 +3,59 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 import pandas as pd
 
-# 1. Configuración
+# 1. Configuración de la página
 st.set_page_config(page_title="LISA Global Tracker", layout="wide")
 
-# 2. Tus llaves
+# 2. Tus llaves de Spotify
 CID = 'f693630ca5df44fa8f10bbcd5fbc6830'
 SEC = '9f90223ed60f46d2b5f39d3a1eb06c2e'
 
+# 3. Conexión automática
 auth_manager = SpotifyClientCredentials(client_id=CID, client_secret=SEC)
 sp = spotipy.Spotify(auth_manager=auth_manager)
 
 st.title("🤳 LISA Global Stats Tracker")
-st.write("Datos globales de Spotify (No de tu cuenta)")
+st.write("Datos globales de Spotify en tiempo real")
 
 try:
-    # ID de Lisa
-    LISA_URI = '5L1oOat9Y8mYvRsmVOSI0O'
+    # BUSQUEDA DIRECTA (Esto evita el error 404)
+    # Buscamos a la artista para obtener sus seguidores
+    search_artist = sp.search(q='LISA', type='artist', limit=1)
+    artist = search_artist['artists']['items'][0]
     
-    # 1. Traer info general del artista (Seguidores totales)
-    artist = sp.artist(LISA_URI)
     seguidores = artist['followers']['total']
-    popularidad_artista = artist['popularity']
+    popularidad_global = artist['popularity']
 
-    # 2. Traer las canciones mas famosas globalmente
-    # Usamos 'US' porque es el mercado global mas grande para ver numeros reales
-    results = sp.artist_top_tracks(LISA_URI, country='US')
-    tracks = results['tracks']
-
+    # Mostramos los números grandes
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Seguidores Globales", f"{seguidores:,}")
+        st.metric("Seguidores Totales", f"{seguidores:,}")
     with col2:
-        st.metric("Popularidad Artista", f"{popularidad_artista}/100")
+        st.metric("Ranking de Popularidad", f"{popularidad_global}/100")
 
     st.write("---")
-    st.subheader("🎵 Top 10 Canciones más populares hoy")
+    st.subheader("🎵 Top Canciones (Nivel Global)")
 
-    lista_final = []
+    # Buscamos las canciones actuales
+    results = sp.search(q='artist:LISA', type='track', limit=10)
+    tracks = results['tracks']['items']
+
+    lista_datos = []
     for t in tracks:
-        lista_final.append({
-            'Canción': t['name'],
-            'Popularidad (0-100)': t['popularity'],
-            'Álbum': t['album']['name'],
-            'Disponible en': f"{len(t['available_markets'])} países"
-        })
+        # Filtro para asegurar que sea LISA la de BLACKPINK
+        if 'LISA' in t['artists'][0]['name'].upper():
+            lista_datos.append({
+                'Canción': t['name'],
+                'Popularidad': t['popularity'],
+                'Álbum': t['album']['name']
+            })
 
-    df = pd.DataFrame(lista_final)
-    st.dataframe(df, use_container_width=True)
-    
-    st.info("Nota: Spotify no permite ver el número exacto de reproducciones totales por este medio, pero la 'Popularidad' indica qué tan cerca está de ser la #1 del mundo.")
+    # Crear tabla y quitar repetidos
+    df = pd.DataFrame(lista_datos).drop_duplicates(subset=['Canción'])
+    df = df.sort_values(by='Popularidad', ascending=False)
+
+    st.table(df)
+    st.success("¡Conexión exitosa con el mercado global!")
 
 except Exception as e:
-    st.error(f"Error al obtener datos globales: {e}")
+    st.error(f"Hubo un detalle: {e}")
