@@ -1,77 +1,74 @@
 import streamlit as st
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
 import pandas as pd
+import requests
 
-# --------------------------
-# CONFIG UI (FANBASE STYLE)
-# --------------------------
-st.set_page_config(page_title="LISA Charts PRO", layout="wide")
+# 1. Configuración Visual
+st.set_page_config(page_title="LISA Global Tracker", layout="wide")
 
 st.markdown("""
 <style>
-body {background-color: #0b0b0b; color: white;}
-.stMetric {background-color: #111; padding: 10px; border-radius: 10px; border: 1px solid #ff007f;}
+    .main {background-color: #0e1117;}
+    .stMetric {background-color: #1a1c23; border: 1px solid #ff007f; padding: 15px; border-radius: 10px;}
+    h1 {color: #ff007f; text-shadow: 2px 2px #000;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🌍 LISA Spotify Global Tracker PRO")
+st.title("🤳 LISA Global Spotify Tracker PRO")
 
-# --------------------------
-# CONFIG - TUS LLAVES
-# --------------------------
+# 2. Tus Llaves (Sin espacios)
 CID = 'f693630ca5df44fa8f10bbcd5fbc6830'.strip()
 SEC = '9f90223ed60f46d2b5f39d3a1eb06c2e'.strip()
 
-try:
-    auth_manager = SpotifyClientCredentials(client_id=CID, client_secret=SEC)
-    sp = spotipy.Spotify(auth_manager=auth_manager)
+# 3. Función para obtener el Token (La llave de acceso)
+def get_token():
+    auth_url = 'https://accounts.spotify.com/api/token'
+    data = {'grant_type': 'client_credentials'}
+    auth_response = requests.post(auth_url, auth=(CID, SEC), data=data)
+    if auth_response.status_code != 200:
+        return None
+    return auth_response.json().get('access_token')
 
-    # ID de LISA de BLACKPINK
+token = get_token()
+
+if token:
+    headers = {'Authorization': f'Bearer {token}'}
+    # ID de LISA
     lisa_id = '5L1oOat9Y8mYvRsmVOSI0O'
     
-    # 1. OBTENER DATOS DE LA ARTISTA
-    artist = sp.artist(lisa_id)
-    seguidores = artist['followers']['total']
-    popularidad_global = artist['popularity']
+    try:
+        # Petición 1: Datos de la Artista
+        artist_res = requests.get(f'https://api.spotify.com/v1/artists/{lisa_id}', headers=headers).json()
+        
+        # Petición 2: Canciones Top
+        tracks_res = requests.get(f'https://api.spotify.com/v1/artists/{lisa_id}/top-tracks?market=US', headers=headers).json()
 
-    # 2. MÉTRICAS PRINCIPALES
-    st.subheader("📊 RESUMEN GLOBAL")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Seguidores Totales", f"{seguidores:,}")
-    with col2:
-        st.metric("Popularidad Global", f"{popularidad_global}/100")
+        # Mostrar Métricas
+        col1, col2 = st.columns(2)
+        col1.metric("Seguidores Globales", f"{artist_res['followers']['total']:,}")
+        col2.metric("Popularidad Global", f"{artist_res['popularity']}/100")
 
-    st.write("---")
+        st.write("---")
+        st.subheader("🏆 Top Canciones Globales")
 
-    # 3. OBTENER TRACKS (MERCADO GLOBAL)
-    st.subheader("🏆 TOP CANCIONES ACTUALES")
-    
-    # Pedimos los datos del mercado de US (que es el estándar para el ranking global)
-    results = sp.artist_top_tracks(lisa_id, country='US')
-    tracks = results['tracks']
+        # Procesar canciones
+        tracks_data = []
+        for track in tracks_res['tracks']:
+            tracks_data.append({
+                "Canción": track['name'],
+                "Popularidad": track['popularity'],
+                "Álbum": track['album']['name'],
+                "Fecha": track['album']['release_date']
+            })
+        
+        df = pd.DataFrame(tracks_data)
+        st.dataframe(df, use_container_width=True)
+        
+        # Gráfica
+        st.bar_chart(df.set_index("Canción")["Popularidad"])
+        st.success("✅ Datos sincronizados con el servidor global de Spotify")
 
-    lista_final = []
-    for t in tracks:
-        lista_final.append({
-            "Canción": t['name'],
-            "Popularidad 🔥": t['popularity'],
-            "Álbum": t['album']['name'],
-            "Lanzamiento": t['album']['release_date']
-        })
-
-    df = pd.DataFrame(lista_final)
-
-    # Mostrar Tabla Pro
-    st.dataframe(df, use_container_width=True)
-
-    # 4. GRÁFICA DE POPULARIDAD
-    st.subheader("📈 Análisis de Popularidad")
-    st.bar_chart(df.set_index("Canción")["Popularidad 🔥"])
-
-    st.success("🔥 Datos reales de Spotify actualizados correctamente")
-
-except Exception as e:
-    st.error(f"Error de conexión: {e}")
-    st.info("Revisa que tus llaves CID y SEC sigan siendo las mismas en tu Dashboard de Spotify.")
+    except Exception as e:
+        st.error(f"Error al leer los datos: {e}")
+else:
+    st.error("⚠️ Error de Autorización (401)")
+    st.info("Tus llaves CID o SEC no son válidas. Revisa tu Dashboard de Spotify.")
