@@ -1,33 +1,48 @@
 import streamlit as st
+import spotipy
+from spotipy.oauth2 import SpotifyClientCredentials
 import pandas as pd
 
-# --- CONFIGURACIÓN TEMPORAL (Aquí irán tus códigos reales luego) ---
-CLIENT_ID = 'TU_CLIENT_ID_PROVISIONAL'
-CLIENT_SECRET = 'TU_CLIENT_SECRET_PROVISIONAL'
+# TUS CÓDIGOS REALES
+CLIENT_ID = 'f693630ca5df44fa8f10bbcd5fbc6830'
+CLIENT_SECRET = '9f90223ed60f46d2b5f39d3a1eb06c2e'
 
-st.set_page_config(page_title="LISA Discography Tracker", layout="wide")
+# Conexión con Spotify
+auth_manager = SpotifyClientCredentials(client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
+sp = spotipy.Spotify(auth_manager=auth_manager)
 
-st.title("🤳 LISA Stats Tracker")
-st.subheader("Monitoreo de la discografía de Lisa")
+st.set_page_config(page_title="LISA Real-Time Stats", layout="wide")
+st.title("🤳 LISA Discography Tracker")
 
-# Datos de ejemplo para que veas cómo funciona el aumento/disminución
-data = {
-    'Canción': ['Rockstar', 'New Woman', 'Moonlit Floor', 'LALISA', 'MONEY'],
-    'Streams Diarios': [520000, 410000, 890000, 150000, 280000],
-    'Cambio (vs Ayer)': ['▲ 15,000', '▼ 5,000', '▲ 45,000', '▲ 2,000', '▼ 1,000']
-}
+# ID de Lisa
+LISA_URI = 'spotify:artist:5L1oOat9Y8mYvRsmVOSI0O'
 
-df = pd.DataFrame(data)
+try:
+    # Traer canciones top de Lisa
+    results = sp.artist_top_tracks(LISA_URI)
+    tracks = results['tracks']
 
-# Mostrar métricas rápidas
-col1, col2 = st.columns(2)
-with col1:
-    st.metric("Top en Honduras 🇭🇳", "Rockstar", "Puesto #34")
-with col2:
-    st.metric("Más escuchada hoy", "Moonlit Floor", "+12%")
+    data = []
+    for track in tracks:
+        data.append({
+            'Canción': track['name'],
+            'Popularidad': track['popularity'],
+            'Álbum': track['album']['name']
+        })
 
-st.write("---")
-st.write("### Estado de la discografía")
-st.table(df)
+    df = pd.DataFrame(data)
 
-st.info("Nota: Los datos reales se actualizarán cuando conectes tu Client ID de Spotify.")
+    # Mostrar métricas
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Top en Honduras 🇭🇳", "Rockstar", "Puesto #34")
+    with col2:
+        st.metric("Más Popular hoy", df.iloc[0]['Canción'], f"{df.iloc[0]['Popularidad']}/100")
+
+    st.write("---")
+    st.subheader("🎵 Estadísticas Reales de Spotify")
+    st.dataframe(df, use_container_width=True)
+    st.success("¡Datos actualizados con éxito!")
+
+except Exception as e:
+    st.error(f"Error al conectar con Spotify: {e}")
