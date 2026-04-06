@@ -4,21 +4,16 @@ import requests
 from io import StringIO
 import base64
 
-# 1. CONFIGURACIÓN DE PÁGINA Y ESTILO CON FONDO PERSONALIZADO
-st.set_page_config(page_title="LISA Worldwide Stats", layout="wide")
+# 1. CONFIGURACIÓN Y FONDO
+st.set_page_config(page_title="LISA Charts Tracker", layout="wide")
 
-# Función para codificar la imagen de fondo local (image_9.png)
 @st.cache_data
-def get_base64_of_bin_file(bin_file):
+def get_base64(bin_file):
     with open(bin_file, 'rb') as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
+        return base64.b64encode(f.read()).decode()
 
-# Intentamos cargar la imagen image_9.png como fondo
 try:
-    # Asegúrate de que el archivo image_9.png esté en la misma carpeta que app.py en GitHub
-    bin_str = get_base64_of_bin_file('image_9.png')
-    
+    bin_str = get_base64('image_9.jpg')
     st.markdown(f"""
     <style>
     .stApp {{
@@ -26,86 +21,88 @@ try:
         background-size: cover;
         background-attachment: fixed;
     }}
-    /* Capa oscura para legibilidad */
     .stApp::before {{
-        content: "";
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background-color: rgba(0, 0, 0, 0.7); /* Oscurece el fondo un 70% */
-        z-index: -1;
+        content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.75); z-index: -1;
     }}
-    /* Colores para resaltar sobre la imagen */
-    h1 {{color: #ff007f !important; text-shadow: 2px 2px #000; text-align: center;}}
-    h3, p, label, .stSelectbox {{color: white !important; font-weight: bold; text-shadow: 1px 1px #000;}}
-    .stMetric {{background-color: rgba(22, 27, 34, 0.8); border-top: 3px solid #ff007f; padding: 20px; border-radius: 10px;}}
+    h1 {{color: #ff007f !important; text-align: center; font-family: 'Arial Black'; font-size: 45px; margin-bottom: 30px;}}
+    .panel {{background-color: rgba(255, 255, 255, 0.1); border: 1px solid #ff007f; padding: 20px; border-radius: 15px; text-align: center;}}
+    .stMetric {{background-color: rgba(0,0,0,0.5); border: 1px solid #ff007f; border-radius: 10px; padding: 10px;}}
+    a {{text-decoration: none; color: #ff007f; font-weight: bold;}}
     </style>
     """, unsafe_allow_html=True)
-except FileNotFoundError:
-    # Si no encuentra la imagen, usa fondo oscuro
-    st.warning("⚠️ No se encontró el archivo 'image_9.png'. Asegúrate de subirlo a tu repositorio de GitHub.")
-    st.markdown("""<style>.stApp {background-color: #0b0b0b; color: white;}</style>""", unsafe_allow_html=True)
+except:
+    st.markdown("<style>.stApp {background-color: black; color: white;}</style>", unsafe_allow_html=True)
 
-st.title("🤳 LISA Worldwide Charts Tracker")
+# TÍTULO CENTRADO SIN EMOJI
+st.markdown("<h1>LISA Worldwide Charts Tracker</h1>", unsafe_allow_html=True)
 
-# 2. SELECTOR DE PAÍS
-paises = {
-    "Global 🌍": "global",
-    "Tailandia 🇹🇭": "th",
-    "Honduras 🇭🇳": "hn",
-    "Brasil 🇧🇷": "br",
-    "Estados Unidos 🇺🇸": "us"
-}
-seleccion = st.selectbox("Mercado para analizar:", list(paises.keys()))
-codigo = paises[seleccion]
+# 2. DEFINICIÓN DE COLUMNAS (Izquierda, Centro, Derecha)
+col_redes, col_charts, col_streaming = st.columns([1, 2, 1])
 
-# 3. FUNCIÓN DE DESCARGA (Anti-bloqueo de streams)
-def get_data(region):
-    url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{region}/daily/latest/regional-{region}-daily-latest.csv"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            lines = response.text.splitlines()
-            start_line = 0
-            for i, line in enumerate(lines[:10]):
-                if 'rank' in line.lower() or 'position' in line.lower():
-                    start_line = i
-                    break
-            df = pd.read_csv(StringIO("\n".join(lines[start_line:])))
-            df.columns = [c.lower().strip() for c in df.columns]
-            return df
-        return None
-    except:
-        return None
+# --- COLUMNA IZQUIERDA: REDES SOCIALES ---
+with col_redes:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.subheader("🔗 Social Media")
+    st.markdown("---")
+    st.markdown("[📸 Instagram](https://www.instagram.com/lalalalisa_m/)")
+    st.markdown("[🎬 YouTube](https://www.youtube.com/@lalalalisa_m)")
+    st.markdown("[🎵 TikTok](https://www.tiktok.com/@lloudofficial)")
+    st.markdown("[🌐 LLOUD Official](https://www.lloud.co/)")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-df = get_data(codigo)
+# --- COLUMNA DERECHA: STREAMING ---
+with col_streaming:
+    st.markdown('<div class="panel">', unsafe_allow_html=True)
+    st.subheader("🎧 Streaming")
+    st.markdown("---")
+    st.markdown("[🟢 Spotify](https://open.spotify.com/artist/5L1oOat9Y8mYvRsmVOSI0O)")
+    st.markdown("[🍎 Apple Music](https://music.apple.com/artist/lisa/1583002235)")
+    st.markdown("[🎶 Deezer](https://www.deezer.com/artist/143588962)")
+    st.markdown("[☁️ SoundCloud](https://soundcloud.com/lalalalisa_m)")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-if df is not None:
-    # Buscador de columnas
-    artist_col = next((c for c in df.columns if 'artist' in c), None)
-    track_col = next((c for c in df.columns if 'track' in c or 'title' in c), None)
-    stream_col = next((c for c in df.columns if 'stream' in c or 'count' in c), None)
-    
-    # Filtramos a LISA
-    lisa_hoy = df[df[artist_col].astype(str).str.contains('LISA', case=False, na=False)].copy()
+# --- COLUMNA CENTRAL: CHARTS ---
+with col_charts:
+    paises = {"Global 🌍": "global", "Tailandia 🇹🇭": "th", "Honduras 🇭🇳": "hn", "Brasil 🇧🇷": "br", "USA 🇺🇸": "us"}
+    seleccion = st.selectbox("Mercado para analizar:", list(paises.keys()))
+    codigo = paises[seleccion]
 
-    if not lisa_hoy.empty:
-        st.subheader(f"📊 Reporte de Streams en {seleccion}")
+    def get_data(region):
+        url = f"https://charts-csv.s3.us-east-1.amazonaws.com/regional/{region}/daily/latest/regional-{region}-daily-latest.csv"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        try:
+            res = requests.get(url, headers=headers)
+            if res.status_code == 200:
+                lines = res.text.splitlines()
+                start = 0
+                for i, l in enumerate(lines[:10]):
+                    if 'rank' in l.lower(): start = i; break
+                df = pd.read_csv(StringIO("\n".join(lines[start:])))
+                df.columns = [c.lower().strip() for c in df.columns]
+                return df
+            return None
+        except: return None
+
+    df = get_data(codigo)
+
+    if df is not None:
+        artist_col = next((c for c in df.columns if 'artist' in c), None)
+        track_col = next((c for c in df.columns if 'track' in c), None)
+        stream_col = next((c for c in df.columns if 'stream' in c), None)
         
-        for _, row in lisa_hoy.iterrows():
-            with st.container():
-                c1, c2, c3 = st.columns([2,1,1])
-                with c1:
-                    st.write(f"### {row[track_col]}")
-                    st.write(f"Artista: {row[artist_col]}")
-                with c2:
-                    st.metric("Posición", f"#{int(row['rank'])}")
-                with c3:
-                    if stream_col:
-                        st.metric("Streams", f"{int(row[stream_col]):,}")
-                st.write("---")
-        st.balloons()
+        lisa_hoy = df[df[artist_col].astype(str).str.contains('LISA', case=False, na=False)].copy()
+
+        if not lisa_hoy.empty:
+            for _, row in lisa_hoy.iterrows():
+                st.markdown(f"### {row[track_col]}")
+                c1, c2 = st.columns(2)
+                c1.metric("Position", f"#{int(row['rank'])}")
+                if stream_col:
+                    c2.metric("Streams", f"{int(row[stream_col]):,}")
+                st.markdown("---")
+            st.balloons()
+        else:
+            st.warning(f"LISA no aparece en el Top 200 de {seleccion} hoy.")
     else:
-        st.warning(f"LISA no aparece en el Top 200 de {seleccion} hoy.")
-else:
-    st.error("No se pudo conectar con el servidor de Spotify.")
+        st.error("Error al conectar con Spotify Charts.")
