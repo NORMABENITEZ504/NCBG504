@@ -7,9 +7,9 @@ def get_base64(bin_file):
         data = f.read()
     return base64.b64encode(data).decode()
 
-# Reemplaza 'fondo.jpg' por el nombre exacto de tu archivo en GitHub
+# Reemplaza 'fondo2.jpg' por el nombre exacto de tu archivo en GitHub
 try:
-    bin_str = get_base64('fondo.jpg') 
+    bin_str = get_base64('fondo2.jpg') 
     
     st.markdown(f"""
     <style>
