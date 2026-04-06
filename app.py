@@ -62,7 +62,7 @@ with col_redes:
 with col_streaming:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     st.subheader("🎧 Streaming")
-    st.markdown("[Spotify](https://open.spotify.com/artist/5L1oOat9Y8mYvRsmVOSI0O)")
+    st.markdown("[Spotify](https://open.spotify.com/intl-es/artist/5L1lO4eRHmJ7a0Q6csE5cT)")
     st.markdown("[Apple Music](https://music.apple.com/hn/artist/lisa/1583908668)")
     st.markdown("[Deezer](https://www.deezer.com/es/artist/145068682)")
     st.markdown("---")
